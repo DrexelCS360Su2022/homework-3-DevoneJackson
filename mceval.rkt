@@ -23,6 +23,11 @@
         ((assignment? exp) (eval-assignment exp env))
         ((definition? exp) (eval-definition exp env))
         ((if? exp) (eval-if exp env))
+        ((and? exp) (eval-and (rest exp) env))
+        ((or? exp) (eval-or (rest exp) env))
+        ((let? exp) (eval-let (rest exp) env))
+        ((delay? exp) (eval-delay (rest exp) env))
+        ((force? exp) (eval-force (rest exp) env))             
         ((lambda? exp)
          (make-procedure (lambda-parameters exp)
                          (lambda-body exp)
@@ -51,6 +56,7 @@
           "Unknown procedure type -- APPLY" procedure))))
 
 
+
 (define (list-of-values exps env)
   (if (no-operands? exps)
       '()
@@ -61,6 +67,36 @@
   (if (true? (mceval (if-predicate exp) env))
       (mceval (if-consequent exp) env)
       (mceval (if-alternative exp) env)))
+
+(define (eval-and exp env)
+  (if (null? exp)
+      #t
+      (if (null? (rest exp))
+                   (mceval (first exp) env)
+                   (if (mceval (first exp) env)
+                       (eval-and (rest exp) env)
+                       #f
+                   )
+       
+      )
+  )
+)
+      
+
+(define (eval-or exp env)
+  (if (null? exp)
+      #f
+      (if (null? (rest exp))
+                   (mceval (first exp) env)
+                   (if (mceval (first exp) env)
+                       #t
+                       (eval-or (rest exp) env)
+                   )
+       
+      )
+  )
+)
+      
 
 (define (eval-sequence exps env)
   (cond ((last-exp? exps) (mceval (first-exp exps) env))
@@ -79,6 +115,30 @@
                     env)
   'ok)
 
+(define (eval-delay exp env) (lambda () exp))
+
+
+(define (memo-proc proc)(let ((already-run? false)(result null))(lambda ()(if (not already-run?)(begin (set! result proc (set! already-run? true)result) result)))))
+
+(define (eval-force exp env) (mceval exp env))
+
+(define (eval-let exp env)
+  (eval-sequence (rest exp)(extend-environment (get-vars (first exp)) (list-of-values (get-vals (first exp)) env) env))
+)
+
+(define (get-vars exp)
+  (if (null? exp)
+      null
+      (cons (first (first exp)) (get-vars (rest exp)))
+   )
+)
+
+(define (get-vals exp)
+  (if (null? exp)
+      null
+      (cons (first (rest (first exp))) (get-vals (rest exp)))
+   )
+)
 ;;;SECTION 4.1.2
 
 (define (self-evaluating? exp)
@@ -122,6 +182,13 @@
       (make-lambda (cdadr exp)
                    (cddr exp))))
 
+
+(define (let? exp) (tagged-list? exp 'let))
+
+(define (force? exp) (tagged-list? exp 'force))
+
+(define (delay? exp) (tagged-list? exp 'delay))
+
 (define (lambda? exp) (tagged-list? exp 'lambda))
 
 (define (lambda-parameters exp) (cadr exp))
@@ -145,6 +212,11 @@
 (define (make-if predicate consequent alternative)
   (list 'if predicate consequent alternative))
 
+(define (and? exp)
+  (tagged-list? exp 'and))
+
+(define (or? exp)
+  (tagged-list? exp 'or))
 
 (define (begin? exp) (tagged-list? exp 'begin))
 
@@ -293,6 +365,7 @@
                              the-empty-environment)))
     (define-variable! 'true true initial-env)
     (define-variable! 'false false initial-env)
+    (eval-definition '(define (memo-proc proc)(let ((already-run? false)(result null))(lambda ()(if (not already-run?)(begin (set! result proc (set! already-run? true)result) result))))) initial-env)
     initial-env))
 
 (define (primitive-procedure? proc)
@@ -305,7 +378,16 @@
         (list 'cdr cdr)
         (list 'cons cons)
         (list 'null? null?)
-;;      more primitives
+        (list '+ +)
+        (list '- -)
+        (list '* *)
+        (list '/ /)
+        (list '> >)
+        (list '< <)
+        (list '>= >=)
+        (list '<= <=)
+        (list '= =)
+        (list 'error (lambda () (error "Metacircular Interpreter Aborted")) )
         ))
 
 (define (primitive-procedure-names)
@@ -360,3 +442,4 @@
 (provide mceval
          setup-environment
          main)
+
